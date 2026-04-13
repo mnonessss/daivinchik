@@ -30,11 +30,6 @@ async def start_handler(message: Message):
                 f"{API_URL}/users/register",
                 json={"telegram_id": telegram_id},
             ) as resp:
-                if resp.status >= 400:
-                    await message.answer(
-                        "Регистрация временно недоступна, попробуйте еще раз."
-                    )
-                    return
                 payload = await resp.json(content_type=None)
         if payload.get("already_registered") is True:
             await message.answer("Вы уже зарегистрированы")
