@@ -1,7 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from datetime import datetime
-from models import *
+from models import Customers, Orders, OrderItems, Products
 from dotenv import load_dotenv
 import os
 
@@ -17,7 +16,6 @@ DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NA
 
 engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)
-
 
 
 def create_order(CustomerID, **kwargs):
@@ -107,7 +105,6 @@ def add_product(ProductName, Price):
 
 
 if __name__ == "__main__":
-    add_product("milk", 100)
-    add_product("bread", 50)
-    create_order(1, milk=2, bread=3)
-    change_email(1, "new_email@gmail.com")
+    add_product("eggs", 100)
+    create_order(1, milk=1, eggs=3)
+    change_email(1, "newnew_email@gmail.com")
