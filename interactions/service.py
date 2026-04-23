@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Interactions, Users
@@ -31,3 +31,32 @@ async def create_interaction(db, from_user, to_user, action):
         await recalculate_user_ranking(db, user_id)
         await warmup_feed_cache(db, user_id)
     return interaction
+
+
+async def has_mutual_like(db: AsyncSession, user_a: int, user_b: int) -> bool:
+    like_a_to_b = (
+        await db.execute(
+            select(Interactions.id).where(
+                and_(
+                    Interactions.from_user == user_a,
+                    Interactions.to_user == user_b,
+                    Interactions.action == "like",
+                )
+            )
+        )
+    ).scalar_one_or_none()
+    if not like_a_to_b:
+        return False
+
+    like_b_to_a = (
+        await db.execute(
+            select(Interactions.id).where(
+                and_(
+                    Interactions.from_user == user_b,
+                    Interactions.to_user == user_a,
+                    Interactions.action == "like",
+                )
+            )
+        )
+    ).scalar_one_or_none()
+    return like_b_to_a is not None

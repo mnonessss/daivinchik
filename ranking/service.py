@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Interactions, Profiles, Ranking, Users
@@ -167,13 +167,21 @@ async def get_ranked_candidates(db, user_id):
 
     filters = [Profiles.user_id != user_id]
     if viewer.preferred_gender:
-        filters.append(Profiles.gender == viewer.preferred_gender)
+        filters.append(
+            or_(Profiles.gender.is_(None), Profiles.gender == viewer.preferred_gender)
+        )
     if viewer.preferred_city:
-        filters.append(Profiles.city == viewer.preferred_city)
+        filters.append(
+            or_(Profiles.city.is_(None), Profiles.city == viewer.preferred_city)
+        )
     if viewer.preferred_age_min is not None:
-        filters.append(Profiles.age >= viewer.preferred_age_min)
+        filters.append(
+            or_(Profiles.age.is_(None), Profiles.age >= viewer.preferred_age_min)
+        )
     if viewer.preferred_age_max is not None:
-        filters.append(Profiles.age <= viewer.preferred_age_max)
+        filters.append(
+            or_(Profiles.age.is_(None), Profiles.age <= viewer.preferred_age_max)
+        )
 
     candidates = (await db.execute(select(Profiles).where(and_(*filters)))).scalars().all()
     payload: list[dict] = []
@@ -227,21 +235,31 @@ async def load_next_chunk(db, user_id):
 
 
 async def warmup_feed_cache(db, user_id):
-    loaded = await load_next_chunk(db, user_id)
-    return loaded > 0
+    try:
+        loaded = await load_next_chunk(db, user_id)
+        return loaded > 0
+    except Exception:
+        ranked = await get_ranked_candidates(db, user_id)
+        return len(ranked) > 0
 
 
 async def get_next_profile_from_feed(db, user_id):
-    queue_key = feed_queue_key(user_id)
-    item = await redis_client.lpop(queue_key)
-    if not item:
-        loaded = await load_next_chunk(db, user_id)
-        if loaded == 0:
-            return None
+    try:
+        queue_key = feed_queue_key(user_id)
         item = await redis_client.lpop(queue_key)
         if not item:
-            return None
+            loaded = await load_next_chunk(db, user_id)
+            if loaded == 0:
+                return None
+            item = await redis_client.lpop(queue_key)
+            if not item:
+                return None
 
-    if await redis_client.llen(queue_key) == 0:
-        await load_next_chunk(db, user_id)
-    return json.loads(item)
+        if await redis_client.llen(queue_key) == 0:
+            await load_next_chunk(db, user_id)
+        return json.loads(item)
+    except Exception:
+        ranked = await get_ranked_candidates(db, user_id)
+        if not ranked:
+            return None
+        return ranked[0]

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 
 from aiogram import Bot, Dispatcher
@@ -28,7 +29,18 @@ pending_photo_delete_map: dict[int, dict[int, int]] = {}
 feed_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🔎 Следующая анкета")],
+        [KeyboardButton(text="👤 Моя анкета")],
+        [KeyboardButton(text="📷 Добавить фото")],
+        [KeyboardButton(text="✏️ Редактировать анкету")],
+        [KeyboardButton(text="🗑 Удалить анкету")],
+    ],
+    resize_keyboard=True,
+)
+
+candidate_keyboard = ReplyKeyboardMarkup(
+    keyboard=[
         [KeyboardButton(text="❤️ Лайк"), KeyboardButton(text="⏭ Скип")],
+        [KeyboardButton(text="🔎 Следующая анкета")],
         [KeyboardButton(text="👤 Моя анкета")],
         [KeyboardButton(text="📷 Добавить фото")],
         [KeyboardButton(text="✏️ Редактировать анкету")],
@@ -48,6 +60,15 @@ edit_profile_keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True,
 )
 
+preferences_edit_keyboard = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="🎯 Мин. возраст"), KeyboardButton(text="🎯 Макс. возраст")],
+        [KeyboardButton(text="🏙 Предпочтительный город"), KeyboardButton(text="⚧ Предпочтительный пол")],
+        [KeyboardButton(text="↩️ Назад к редактированию")],
+    ],
+    resize_keyboard=True,
+)
+
 photo_upload_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="✅ Готово с фото"), KeyboardButton(text="❌ Отмена загрузки фото")],
@@ -62,7 +83,12 @@ async def fetch_next_candidate(user_id):
         async with session.get(f"{API_URL}/ranking/feed/next/{user_id}") as resp:
             if resp.status == 404:
                 return None
-            return await resp.json(content_type=None)
+            if resp.status != 200:
+                return None
+            try:
+                return await resp.json(content_type=None)
+            except (aiohttp.ContentTypeError, json.JSONDecodeError):
+                return None
 
 
 async def send_interaction(from_user, to_user, action):
@@ -72,6 +98,19 @@ async def send_interaction(from_user, to_user, action):
             f"{API_URL}/interactions/",
             json={"from_user": from_user, "to_user": to_user, "action": action},
         )
+
+
+async def check_match(user_a, user_b):
+    timeout = aiohttp.ClientTimeout(total=10)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(f"{API_URL}/interactions/match/{user_a}/{user_b}") as resp:
+            if resp.status != 200:
+                return False
+            try:
+                payload = await resp.json(content_type=None)
+            except (aiohttp.ContentTypeError, json.JSONDecodeError):
+                return False
+            return bool(payload.get("matched"))
 
 
 async def get_my_profile(user_id):
@@ -176,7 +215,10 @@ async def ensure_user_id(telegram_id: int):
         ) as resp:
             if resp.status != 200:
                 return None
-            payload = await resp.json(content_type=None)
+            try:
+                payload = await resp.json(content_type=None)
+            except (aiohttp.ContentTypeError, json.JSONDecodeError):
+                return None
 
     user_id = payload.get("user_id")
     if not user_id:
@@ -209,9 +251,10 @@ async def show_next_profile(message, user_id):
         f"Пол: {candidate.get('gender')}\n"
         f"Город: {candidate.get('city')}\n"
         f"О себе: {candidate.get('bio')}\n"
-        f"Рейтинг: {candidate.get('final_score')}"
+        f"Рейтинг: {candidate.get('final_score')}\n"
+        "Действия: ❤️ Лайк или ⏭ Скип"
     )
-    await message.answer(card, reply_markup=feed_keyboard)
+    await message.answer(card, reply_markup=candidate_keyboard)
 
 
 def render_profile_card(profile):
@@ -249,7 +292,22 @@ async def start_handler(message: Message):
                 f"{API_URL}/users/register",
                 json={"telegram_id": telegram_id},
             ) as resp:
-                payload = await resp.json(content_type=None)
+                if resp.status != 200:
+                    body = await resp.text()
+                    await message.answer(
+                        f"Ошибка регистрации: API вернул {resp.status}.\n"
+                        f"Ответ: {body[:200] or 'empty response'}"
+                    )
+                    return
+                try:
+                    payload = await resp.json(content_type=None)
+                except (aiohttp.ContentTypeError, json.JSONDecodeError):
+                    body = await resp.text()
+                    await message.answer(
+                        "Ошибка регистрации: API вернул не JSON.\n"
+                        f"Ответ: {body[:200] or 'empty response'}"
+                    )
+                    return
         user_id = payload["user_id"]
         session_user_ids[telegram_id] = user_id
 
@@ -304,6 +362,14 @@ async def like_handler(message: Message):
     try:
         await send_interaction(user_id, candidate_user_id, "like")
         await message.answer("Лайк отправлен.")
+        if await check_match(user_id, candidate_user_id):
+            candidate_profile = await get_my_profile(candidate_user_id)
+            candidate_name = (
+                candidate_profile.get("name")
+                if candidate_profile and candidate_profile.get("name")
+                else "этим пользователем"
+            )
+            await message.answer(f"🎉 У вас мэтч с {candidate_name}!")
         await show_next_profile(message, user_id)
     except aiohttp.ClientError:
         await message.answer("Не удалось отправить лайк.")
@@ -443,12 +509,56 @@ async def edit_preferences_prompt_handler(message: Message):
     user_id = session_user_ids.get(message.from_user.id)
     if not user_id or user_id not in profile_edit_drafts:
         return
-    awaiting_profile_field[user_id] = "preferences"
     await message.answer(
-        "Введи предпочтения в формате:\n"
-        "preferred_age_min,preferred_age_max,preferred_city,preferred_gender\n"
-        "Например: 25,35,Москва,female"
+        "Открыто редактирование предпочтений.\n"
+        "Выбери нужное поле кнопкой.",
+        reply_markup=preferences_edit_keyboard,
     )
+
+
+@dp.message(lambda message: message.text == "🎯 Мин. возраст")
+async def edit_pref_age_min_prompt_handler(message: Message):
+    user_id = session_user_ids.get(message.from_user.id)
+    if not user_id or user_id not in profile_edit_drafts:
+        return
+    awaiting_profile_field[user_id] = "preferred_age_min"
+    await message.answer("Введи минимальный предпочтительный возраст:")
+
+
+@dp.message(lambda message: message.text == "🎯 Макс. возраст")
+async def edit_pref_age_max_prompt_handler(message: Message):
+    user_id = session_user_ids.get(message.from_user.id)
+    if not user_id or user_id not in profile_edit_drafts:
+        return
+    awaiting_profile_field[user_id] = "preferred_age_max"
+    await message.answer("Введи максимальный предпочтительный возраст:")
+
+
+@dp.message(lambda message: message.text == "🏙 Предпочтительный город")
+async def edit_pref_city_prompt_handler(message: Message):
+    user_id = session_user_ids.get(message.from_user.id)
+    if not user_id or user_id not in profile_edit_drafts:
+        return
+    awaiting_profile_field[user_id] = "preferred_city"
+    await message.answer("Введи предпочитаемый город (или '-' чтобы очистить):")
+
+
+@dp.message(lambda message: message.text == "⚧ Предпочтительный пол")
+async def edit_pref_gender_prompt_handler(message: Message):
+    user_id = session_user_ids.get(message.from_user.id)
+    if not user_id or user_id not in profile_edit_drafts:
+        return
+    awaiting_profile_field[user_id] = "preferred_gender"
+    await message.answer("Введи предпочитаемый пол (или '-' чтобы очистить):")
+
+
+@dp.message(lambda message: message.text == "↩️ Назад к редактированию")
+async def back_to_edit_profile_handler(message: Message):
+    user_id = session_user_ids.get(message.from_user.id)
+    if not user_id or user_id not in profile_edit_drafts:
+        return
+    awaiting_profile_field.pop(user_id, None)
+    await message.answer("Возвращаю в общее редактирование анкеты.", reply_markup=edit_profile_keyboard)
 
 
 @dp.message(lambda message: message.text == "🖼 Удалить фото")
@@ -544,7 +654,7 @@ async def profile_edit_value_handler(message: Message):
     raw_value = (message.text or "").strip()
     draft = profile_edit_drafts[user_id]
     try:
-        if field in {"age"}:
+        if field in {"age", "preferred_age_min", "preferred_age_max"}:
             draft[field] = int(raw_value)
         elif field == "delete_photo":
             if not raw_value.isdigit():
@@ -561,15 +671,8 @@ async def profile_edit_value_handler(message: Message):
                 return
             pending_photo_delete_map.pop(user_id, None)
             await message.answer("Фото удалено.")
-        elif field == "preferences":
-            parts = [part.strip() for part in raw_value.split(",")]
-            if len(parts) != 4:
-                await message.answer("Неверный формат. Ожидаю 4 значения через запятую.")
-                return
-            draft["preferred_age_min"] = int(parts[0])
-            draft["preferred_age_max"] = int(parts[1])
-            draft["preferred_city"] = parts[2] or None
-            draft["preferred_gender"] = parts[3] or None
+        elif field in {"preferred_city", "preferred_gender"}:
+            draft[field] = None if raw_value == "-" else raw_value
         else:
             draft[field] = raw_value
     except ValueError:
@@ -581,6 +684,13 @@ async def profile_edit_value_handler(message: Message):
         await message.answer(
             "Фото удалено. Можешь удалить еще одно фото или продолжить редактирование.",
             reply_markup=edit_profile_keyboard,
+        )
+        return
+
+    if field in {"preferred_age_min", "preferred_age_max", "preferred_city", "preferred_gender"}:
+        await message.answer(
+            "Предпочтение обновлено в черновике. Можешь изменить другие предпочтения.",
+            reply_markup=preferences_edit_keyboard,
         )
         return
 
