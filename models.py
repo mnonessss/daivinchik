@@ -56,3 +56,12 @@ class Interactions(Base):
     to_user = Column(Integer, ForeignKey("users.id"), nullable=False)
     action = Column(String, nullable=False)
     created_at = Column(DateTime, nullable=False, default=datetime.now)
+
+
+class ProfilePhotos(Base):
+    __tablename__ = "profile_photos"
+
+    id = Column(Integer, primary_key=True, index=True, nullable=False)
+    profile_id = Column(Integer, ForeignKey("profiles.id"), nullable=False)
+    telegram_file_id = Column(String, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
