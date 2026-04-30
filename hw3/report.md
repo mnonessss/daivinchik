@@ -63,17 +63,17 @@
 
 ## Таблица результатов
 
-| strategy | profile | throughput_req_sec | avg_latency_ms | db_accesses | cache_hit_rate | write_back_max_pending | write_back_flush_batches |
+| strategy | profile | throughput_req_sec | avg_latency_ms | db_writes | db_reads | cache_hit_rate | write_back_max_pending |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| cache_aside | read_heavy | 552.35 | 36.20 | 4551 | 0.7293 | 0 | 0 |
-| cache_aside | balanced | 422.30 | 47.45 | 6501 | 0.4571 | 0 | 0 |
-| cache_aside | write_heavy | 294.55 | 68.13 | 5676 | 0.1764 | 0 | 0 |
-| write_through | read_heavy | 515.50 | 38.79 | 2832 | 0.9032 | 0 | 0 |
-| write_through | balanced | 376.15 | 53.28 | 4251 | 0.8732 | 0 | 0 |
-| write_through | write_heavy | 289.50 | 69.24 | 4875 | 0.8206 | 0 | 0 |
-| write_back | read_heavy | 445.80 | 44.84 | 2482 | 0.8886 | 109 | 19 |
-| write_back | balanced | 469.45 | 42.56 | 4486 | 0.8912 | 313 | 18 |
-| write_back | write_heavy | 456.85 | 43.76 | 5980 | 0.9017 | 389 | 18 |
+| cache_aside | read_heavy | 509.6 | 39.26 | 2066 | 2303 | 0.7166 | 0 |
+| cache_aside | balanced | 356.85 | 56.21 | 3606 | 2037 | 0.4231 | 0 |
+| cache_aside | write_heavy | 272.65 | 73.5 | 4357 | 914 | 0.1661 | 0 |
+| write_through | read_heavy | 463.4 | 43.17 | 1857 | 799 | 0.8922 | 0 |
+| write_through | balanced | 381.7 | 52.53 | 3902 | 502 | 0.8655 | 0 |
+| write_through | write_heavy | 312.0 | 64.28 | 4988 | 213 | 0.8299 | 0 |
+| write_back | read_heavy | 498.9 | 40.09 | 1797 | 804 | 0.8994 | 150 |
+| write_back | balanced | 527.55 | 37.9 | 4479 | 493 | 0.9058 | 423 |
+| write_back | write_heavy | 439.85 | 45.48 | 5573 | 205 | 0.8852 | 408 |
 
 ## Анализ результатов
 
@@ -122,5 +122,5 @@
   - `write_back` — максимум производительности на write-heavy, но с отложенной записью и риском потери буфера при сбое;  
   - `cache_aside` — простая и понятная схема, но хуже при частых записях.
 
-###Скрин из консоли:
-image.png
+### Скрин из консоли:
+![](image.png)

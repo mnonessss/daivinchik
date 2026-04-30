@@ -1,0 +1,10 @@
+strategy,profile,throughput_req_sec,avg_latency_ms,db_accesses,cache_hit_rate,db_reads,db_writes,cache_hits,cache_misses,write_back_max_pending,write_back_flush_batches
+cache_aside,read_heavy,509.6,39.26,4369,0.7166,2303,2066,5823,2303,0,0
+cache_aside,balanced,356.85,56.21,5643,0.4231,2037,3606,1494,2037,0,0
+cache_aside,write_heavy,272.65,73.5,5271,0.1661,914,4357,182,914,0,0
+write_through,read_heavy,463.4,43.17,2656,0.8922,799,1857,6612,799,0,0
+write_through,balanced,381.7,52.53,4404,0.8655,502,3902,3230,502,0,0
+write_through,write_heavy,312.0,64.28,5201,0.8299,213,4988,1039,213,0,0
+write_back,read_heavy,498.9,40.09,2601,0.8994,804,1797,7185,804,150,18
+write_back,balanced,527.55,37.9,4972,0.9058,493,4479,4743,493,423,18
+write_back,write_heavy,439.85,45.48,5778,0.8852,205,5573,1581,205,408,17

@@ -198,14 +198,14 @@ def save_results(rows):
 
     with open(md_path, "w", encoding="utf-8") as file:
         file.write("## Таблица результатов\n\n")
-        header = "| strategy | profile | throughput_req_sec | avg_latency_ms | db_accesses | cache_hit_rate | write_back_max_pending |\n"
-        sep = "|---|---:|---:|---:|---:|---:|---:|\n"
+        header = "| strategy | profile | throughput_req_sec | avg_latency_ms | db_writes | db_reads | cache_hit_rate | write_back_max_pending |\n"
+        sep = "|---|---:|---:|---:|---:|---:|---:|---:|\n"
         file.write(header)
         file.write(sep)
         for row in rows:
             file.write(
                 f"| {row['strategy']} | {row['profile']} | {row['throughput_req_sec']} | "
-                f"{row['avg_latency_ms']} | {row['db_accesses']} | {row['cache_hit_rate']} | "
+                f"{row['avg_latency_ms']} | {row['db_writes']} | {row['db_reads']} | {row['cache_hit_rate']} | "
                 f"{row['write_back_max_pending']} |\n"
             )
 
