@@ -3,6 +3,7 @@ import json
 import os
 
 from aiogram import Bot, Dispatcher
+from aiogram.exceptions import TelegramNetworkError
 from aiogram.filters import Command
 from aiogram.filters import CommandStart
 import aiohttp
@@ -285,6 +286,8 @@ def render_profile_card(profile):
 async def start_handler(message: Message):
     telegram_id = message.from_user.id
     welcome_text = "Добро пожаловать в Дайвинчик"
+
+    payload = None
     try:
         timeout = aiohttp.ClientTimeout(total=10)
         async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -308,31 +311,38 @@ async def start_handler(message: Message):
                         f"Ответ: {body[:200] or 'empty response'}"
                     )
                     return
-        user_id = payload["user_id"]
-        session_user_ids[telegram_id] = user_id
-
-        timeout = aiohttp.ClientTimeout(total=10)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            await session.post(f"{API_URL}/ranking/feed/start/{user_id}")
-
-        if payload.get("already_registered") is True:
-            await message.answer(
-                "Вы уже зарегистрированы. Используй кнопки для просмотра ленты.",
-                reply_markup=feed_keyboard,
-            )
-            return
-        await message.answer(
-            f"{welcome_text}\nНажми «Следующая анкета», чтобы начать.",
-            reply_markup=feed_keyboard,
-        )
     except (asyncio.TimeoutError, aiohttp.ServerTimeoutError):
         await message.answer(
             "Сервис регистрации не отвечает (таймаут). Попробуй еще раз через минуту."
         )
+        return
     except aiohttp.ClientError:
         await message.answer(
             "Не удалось связаться с API. Проверьте, что backend запущен."
         )
+        return
+
+    user_id = payload["user_id"]
+    session_user_ids[telegram_id] = user_id
+
+    # Прогрев ленты не должен ломать успешную регистрацию.
+    try:
+        timeout = aiohttp.ClientTimeout(total=5)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            await session.post(f"{API_URL}/ranking/feed/start/{user_id}")
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        pass
+
+    if payload.get("already_registered") is True:
+        await message.answer(
+            "Вы уже зарегистрированы. Используй кнопки для просмотра ленты.",
+            reply_markup=feed_keyboard,
+        )
+        return
+    await message.answer(
+        f"{welcome_text}\nНажми «Следующая анкета», чтобы начать.",
+        reply_markup=feed_keyboard,
+    )
 
 
 @dp.message(Command("next"))
@@ -726,7 +736,13 @@ async def upload_photo_handler(message: Message):
 
 
 async def main():
-    await dp.start_polling(bot)
+    while True:
+        try:
+            await dp.start_polling(bot)
+            break
+        except TelegramNetworkError as exc:
+            print(f"Telegram network error: {exc}. Retrying in 5 seconds...")
+            await asyncio.sleep(5)
 
 
 if __name__ == "__main__":

@@ -11,3 +11,5 @@ __pycache__/
 *.pyzwz
 *.pyzwzw
 hw2/venv/
+hw3/venv/
+hw3/data.sqlite3

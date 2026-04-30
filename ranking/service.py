@@ -165,7 +165,22 @@ async def get_ranked_candidates(db, user_id):
     if not viewer:
         return []
 
+    interacted_user_ids = set(
+        (
+            await db.execute(
+                select(Interactions.to_user).where(
+                    and_(
+                        Interactions.from_user == user_id,
+                        Interactions.action.in_(("like", "skip")),
+                    )
+                )
+            )
+        ).scalars()
+    )
+
     filters = [Profiles.user_id != user_id]
+    if interacted_user_ids:
+        filters.append(~Profiles.user_id.in_(interacted_user_ids))
     if viewer.preferred_gender:
         filters.append(
             or_(Profiles.gender.is_(None), Profiles.gender == viewer.preferred_gender)
