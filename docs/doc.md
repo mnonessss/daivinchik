@@ -19,6 +19,8 @@ Telegram-бот знакомств с backend на FastAPI, очередями �
 - **Celery Workers** — фоновые задачи
 - **MinIO (S3 Storage)** — хранение фотографий профилей.
 
+При `S3_ENABLED=true` backend скачивает файл из Telegram по `telegram_file_id` (нужен `TOKEN` / `TELEGRAM_BOT_TOKEN` в окружении), загружает объект в бакет и сохраняет `s3_object_key` в БД; в ответах API для фото отдаётся presigned `url`. Локально без MinIO задайте `S3_ENABLED=false` в `.env` (как в `tests/conftest.py`).
+
 
 ## Тестирование продукта
 

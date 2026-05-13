@@ -1,4 +1,5 @@
 import os
+from urllib.parse import quote_plus
 
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -17,7 +18,8 @@ if not DATABASE_URL:
         raise RuntimeError("USER_DB, PWD_DB and DB_NAME must be set in environment/.env")
 
     DATABASE_URL = (
-        f"postgresql+asyncpg://{USER_DB}:{PWD_DB}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+        f"postgresql+asyncpg://{quote_plus(USER_DB)}:{quote_plus(PWD_DB)}"
+        f"@{DB_HOST}:{DB_PORT}/{quote_plus(DB_NAME)}"
     )
 
 _engine_kwargs: dict = {"echo": False}

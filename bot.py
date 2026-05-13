@@ -91,6 +91,15 @@ photo_upload_keyboard = ReplyKeyboardMarkup(
 )
 
 
+def photo_input_for_telegram(photo: dict) -> str | None:
+    """What to pass to sendPhoto: prefer Telegram file_id.
+
+    Presigned S3 URLs are often signed for an internal endpoint (e.g. http://minio:9000),
+    which Telegram's servers cannot reach; file_id always works when we stored it.
+    """
+    return photo.get("telegram_file_id") or photo.get("url")
+
+
 async def fetch_next_candidate(user_id):
     timeout = aiohttp.ClientTimeout(total=10)
     async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -565,9 +574,9 @@ async def my_profile_handler(message: Message):
         await message.answer(render_profile_card(profile), reply_markup=feed_keyboard)
         photos = await get_profile_photos(profile["id"])
         for photo in photos:
-            telegram_file_id = photo.get("telegram_file_id")
-            if telegram_file_id:
-                await message.answer_photo(photo=telegram_file_id, reply_markup=feed_keyboard)
+            photo_ref = photo_input_for_telegram(photo)
+            if photo_ref:
+                await message.answer_photo(photo=photo_ref, reply_markup=feed_keyboard)
     except aiohttp.ClientError:
         await message.answer("Не удалось получить данные анкеты.")
 
@@ -719,9 +728,9 @@ async def edit_delete_photo_prompt_handler(message: Message):
     await message.answer("Выбери фото для удаления: отправь номер фото из списка.")
     for idx, photo in enumerate(photos, start=1):
         pending_photo_delete_map[user_id][idx] = photo["id"]
-        file_id = photo.get("telegram_file_id")
-        if file_id:
-            await message.answer_photo(photo=file_id, caption=f"Фото #{idx}")
+        file_ref = photo_input_for_telegram(photo)
+        if file_ref:
+            await message.answer_photo(photo=file_ref, caption=f"Фото #{idx}")
 
     awaiting_profile_field[user_id] = "delete_photo"
 

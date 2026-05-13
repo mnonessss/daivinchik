@@ -13,6 +13,7 @@ import os
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite://")
 os.environ.setdefault("CELERY_BROKER_URL", "memory://")
 os.environ.setdefault("CELERY_RESULT_BACKEND", "cache+memory://")
+os.environ.setdefault("S3_ENABLED", "false")
 
 from celery_app import celery_app
 

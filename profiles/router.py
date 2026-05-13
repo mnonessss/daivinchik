@@ -9,6 +9,7 @@ from profiles.schema import (
     ProfileResponse,
     ProfileUpdate,
 )
+from profiles.photo_response import profile_photo_to_response
 from profiles.service import (
     add_profile_photo,
     create_profile,
@@ -95,14 +96,20 @@ async def delete_profile_endpoint(profile_id: int, db=Depends(get_db)):
 
 @router.post("/{profile_id}/photos", response_model=ProfilePhotoResponse, status_code=status.HTTP_201_CREATED)
 async def add_profile_photo_endpoint(profile_id: int, body: ProfilePhotoCreate, db=Depends(get_db)):
-    photo = await add_profile_photo(db, profile_id, body.telegram_file_id)
+    try:
+        photo = await add_profile_photo(db, profile_id, body.telegram_file_id)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
     if not photo:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
 
     profile = await get_profile_by_id(db, profile_id)
     if profile:
         await recalculate_user_ranking(db, profile.user_id)
-    return photo
+    return profile_photo_to_response(photo)
 
 
 @router.get("/{profile_id}/photos", response_model=list[ProfilePhotoResponse])
@@ -110,7 +117,8 @@ async def list_profile_photos_endpoint(profile_id: int, db=Depends(get_db)):
     profile = await get_profile_by_id(db, profile_id)
     if not profile:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
-    return await get_profile_photos(db, profile_id)
+    photos = await get_profile_photos(db, profile_id)
+    return [profile_photo_to_response(p) for p in photos]
 
 
 @router.post("/by-user/{user_id}/photos", response_model=ProfilePhotoResponse, status_code=status.HTTP_201_CREATED)
@@ -118,9 +126,15 @@ async def add_photo_by_user_endpoint(user_id: int, body: ProfilePhotoCreate, db=
     profile = await get_profile_by_user_id(db, user_id)
     if not profile:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
-    photo = await add_profile_photo(db, profile.id, body.telegram_file_id)
+    try:
+        photo = await add_profile_photo(db, profile.id, body.telegram_file_id)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
     await recalculate_user_ranking(db, user_id)
-    return photo
+    return profile_photo_to_response(photo)
 
 
 @router.delete("/{profile_id}/photos/{photo_id}", status_code=status.HTTP_204_NO_CONTENT)

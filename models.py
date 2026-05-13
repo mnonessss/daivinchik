@@ -66,5 +66,6 @@ class ProfilePhotos(Base):
 
     id = Column(Integer, primary_key=True, index=True, nullable=False)
     profile_id = Column(Integer, ForeignKey("profiles.id"), nullable=False)
-    telegram_file_id = Column(String, nullable=False)
+    telegram_file_id = Column(String, nullable=True)
+    s3_object_key = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.now)

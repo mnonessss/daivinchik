@@ -3,6 +3,8 @@ aiogram
 aiosqlite
 alembic
 asyncpg
+boto3
+psycopg2-binary
 celery
 fastapi
 httpx

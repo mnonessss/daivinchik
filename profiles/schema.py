@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ProfileCreate(BaseModel):
@@ -50,8 +50,8 @@ class ProfilePhotoCreate(BaseModel):
 
 
 class ProfilePhotoResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     id: int
     profile_id: int
-    telegram_file_id: str
+    telegram_file_id: str | None = None
+    s3_object_key: str | None = None
+    url: str | None = Field(default=None, description="Presigned GET URL when photo is stored in S3")
