@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ProfileCreate(BaseModel):
@@ -29,6 +29,8 @@ class ProfileUpdate(BaseModel):
 
 
 class ProfileResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     user_id: int
     name: str
@@ -42,18 +44,14 @@ class ProfileResponse(BaseModel):
     preferred_city: Optional[str] = None
     preferred_gender: Optional[str] = None
 
-    class Config:
-        from_attributes = True
-
 
 class ProfilePhotoCreate(BaseModel):
     telegram_file_id: str
 
 
 class ProfilePhotoResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     profile_id: int
     telegram_file_id: str
-
-    class Config:
-        from_attributes = True

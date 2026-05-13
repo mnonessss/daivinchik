@@ -1,14 +1,13 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class RankingResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     user_id: int
     primary_score: float
     behavioral_score: float
     final_score: float
-
-    class Config:
-        from_attributes = True
 
 
 class RankedProfileResponse(BaseModel):

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from tasks import recalculate_all_rankings, recalculate_user_ranking_task
 from database import get_db
 from ranking.schema import RankedProfileResponse, RankingResponse
 from ranking.service import (
@@ -19,6 +20,18 @@ async def recalculate_ranking_endpoint(user_id: int, db: AsyncSession = Depends(
     if not ranking_obj:
         raise HTTPException(status_code=404, detail="Profile for user not found")
     return ranking_obj
+
+
+@router.post("/recalculate/{user_id}/async")
+async def recalculate_ranking_async_endpoint(user_id: int):
+    task = recalculate_user_ranking_task.delay(user_id)
+    return {"task_id": task.id, "status": "queued"}
+
+
+@router.post("/recalculate-all/async")
+async def recalculate_all_async_endpoint():
+    task = recalculate_all_rankings.delay()
+    return {"task_id": task.id, "status": "queued"}
 
 
 @router.get("/{user_id}", response_model=RankingResponse)

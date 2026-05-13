@@ -20,6 +20,22 @@ Telegram-бот знакомств с backend на FastAPI, очередями �
 - **MinIO (S3 Storage)** — хранение фотографий профилей.
 
 
+## Тестирование продукта
+
+Запуск всех тестов (unit + интеграция API):
+
+1. `pip install -r requirements.txt`
+2. `pytest tests/`
+
+Интеграционные тесты (`tests/test_api_integration.py`) используют in-memory SQLite (`DATABASE_URL` задаётся в `tests/conftest.py`), подмену Redis для кэша ленты и `Celery` в режиме `task_always_eager`, чтобы проверять `POST .../async` без брокера.
+
+Покрыто:
+
+- регистрация с `referral_id` и проверка поля в БД;
+- игнорирование несуществующего `referral_id`;
+- `POST /ranking/recalculate/{id}/async` и `POST /ranking/recalculate-all/async` с последующей проверкой строки `ranking` / `GET /ranking/{id}`.
+
+
 ## Модули backend
 
 ### Users

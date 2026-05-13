@@ -10,6 +10,7 @@ import aiohttp
 from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup
 
 from dotenv import load_dotenv
+from referral import parse_referral_payload
 
 load_dotenv()
 
@@ -22,6 +23,7 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher()
 session_user_ids: dict[int, int] = {}
 session_current_candidates: dict[int, int] = {}
+session_last_matches: dict[int, int] = {}
 profile_edit_drafts: dict[int, dict[str, str | int]] = {}
 awaiting_profile_field: dict[int, str] = {}
 uploading_profile_photos: set[int] = set()
@@ -31,6 +33,7 @@ feed_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🔎 Следующая анкета")],
         [KeyboardButton(text="👤 Моя анкета")],
+        [KeyboardButton(text="🎁 Пригласить друга")],
         [KeyboardButton(text="📷 Добавить фото")],
         [KeyboardButton(text="✏️ Редактировать анкету")],
         [KeyboardButton(text="🗑 Удалить анкету")],
@@ -43,9 +46,19 @@ candidate_keyboard = ReplyKeyboardMarkup(
         [KeyboardButton(text="❤️ Лайк"), KeyboardButton(text="⏭ Скип")],
         [KeyboardButton(text="🔎 Следующая анкета")],
         [KeyboardButton(text="👤 Моя анкета")],
+        [KeyboardButton(text="🎁 Пригласить друга")],
         [KeyboardButton(text="📷 Добавить фото")],
         [KeyboardButton(text="✏️ Редактировать анкету")],
         [KeyboardButton(text="🗑 Удалить анкету")],
+    ],
+    resize_keyboard=True,
+)
+
+match_keyboard = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="💬 Начать диалог")],
+        [KeyboardButton(text="🔎 Следующая анкета")],
+        [KeyboardButton(text="👤 Моя анкета")],
     ],
     resize_keyboard=True,
 )
@@ -228,6 +241,39 @@ async def ensure_user_id(telegram_id: int):
     return user_id
 
 
+async def get_referral_code(user_id: int):
+    timeout = aiohttp.ClientTimeout(total=10)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(f"{API_URL}/users/referral/{user_id}") as resp:
+            if resp.status != 200:
+                return None
+            payload = await resp.json(content_type=None)
+            return payload.get("referral_code")
+
+
+async def get_user_by_id(user_id: int):
+    timeout = aiohttp.ClientTimeout(total=10)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(f"{API_URL}/users/{user_id}") as resp:
+            if resp.status != 200:
+                return None
+            return await resp.json(content_type=None)
+
+
+async def notify_user_by_user_id(user_id: int, text: str, reply_markup=None):
+    user = await get_user_by_id(user_id)
+    if not user:
+        return
+    telegram_id = user.get("telegram_id")
+    if not telegram_id:
+        return
+    try:
+        await bot.send_message(telegram_id, text, reply_markup=reply_markup)
+    except Exception:
+        # Уведомление второму пользователю не должно ломать основной flow.
+        return
+
+
 def start_edit_session(user_id):
     profile_edit_drafts[user_id] = {}
     awaiting_profile_field.pop(user_id, None)
@@ -286,6 +332,8 @@ def render_profile_card(profile):
 async def start_handler(message: Message):
     telegram_id = message.from_user.id
     welcome_text = "Добро пожаловать в Дайвинчик"
+    start_parts = (message.text or "").split(maxsplit=1)
+    referral_id = parse_referral_payload(start_parts[1]) if len(start_parts) > 1 else None
 
     payload = None
     try:
@@ -293,7 +341,7 @@ async def start_handler(message: Message):
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(
                 f"{API_URL}/users/register",
-                json={"telegram_id": telegram_id},
+                json={"telegram_id": telegram_id, "referral_id": referral_id},
             ) as resp:
                 if resp.status != 200:
                     body = await resp.text()
@@ -345,6 +393,27 @@ async def start_handler(message: Message):
     )
 
 
+@dp.message(Command("invite"))
+@dp.message(lambda message: message.text == "🎁 Пригласить друга")
+async def invite_friend_handler(message: Message):
+    user_id = await ensure_user_id(message.from_user.id)
+    if not user_id:
+        await message.answer("Сначала зарегистрируйся через /start")
+        return
+    referral_code = await get_referral_code(user_id)
+    if not referral_code:
+        await message.answer("Не удалось получить реферальный код. Попробуй позже.")
+        return
+
+    me = await bot.get_me()
+    invite_link = f"https://t.me/{me.username}?start={referral_code}" if me.username else f"/start {referral_code}"
+    await message.answer(
+        "Поделись этой ссылкой с другом. Когда он зарегистрируется, приглашение зачтется:\n"
+        f"{invite_link}",
+        reply_markup=feed_keyboard,
+    )
+
+
 @dp.message(Command("next"))
 @dp.message(lambda message: message.text == "🔎 Следующая анкета")
 async def next_handler(message):
@@ -372,6 +441,13 @@ async def like_handler(message: Message):
     try:
         await send_interaction(user_id, candidate_user_id, "like")
         await message.answer("Лайк отправлен.")
+        sender_name = message.from_user.full_name or "Пользователь"
+        await notify_user_by_user_id(
+            candidate_user_id,
+            f"❤️ Тебе поставили лайк от {sender_name}.",
+            reply_markup=feed_keyboard,
+        )
+
         if await check_match(user_id, candidate_user_id):
             candidate_profile = await get_my_profile(candidate_user_id)
             candidate_name = (
@@ -379,10 +455,62 @@ async def like_handler(message: Message):
                 if candidate_profile and candidate_profile.get("name")
                 else "этим пользователем"
             )
-            await message.answer(f"🎉 У вас мэтч с {candidate_name}!")
+            session_last_matches[user_id] = candidate_user_id
+            session_last_matches[candidate_user_id] = user_id
+
+            await message.answer(
+                f"🎉 У вас мэтч с {candidate_name}!\n"
+                "Нажми «💬 Начать диалог», чтобы отметить старт общения.",
+                reply_markup=match_keyboard,
+            )
+            my_profile = await get_my_profile(user_id)
+            my_name = (
+                my_profile.get("name")
+                if my_profile and my_profile.get("name")
+                else sender_name
+            )
+            await notify_user_by_user_id(
+                candidate_user_id,
+                f"🎉 У вас мэтч с {my_name}!\n"
+                "Нажми «💬 Начать диалог», чтобы отметить старт общения.",
+                reply_markup=match_keyboard,
+            )
+            return
+
         await show_next_profile(message, user_id)
     except aiohttp.ClientError:
         await message.answer("Не удалось отправить лайк.")
+
+
+@dp.message(Command("start_dialog"))
+@dp.message(lambda message: message.text == "💬 Начать диалог")
+async def start_dialog_handler(message: Message):
+    user_id = await ensure_user_id(message.from_user.id)
+    if not user_id:
+        await message.answer("Сначала зарегистрируйся через /start")
+        return
+
+    matched_user_id = session_last_matches.get(user_id)
+    if not matched_user_id:
+        await message.answer(
+            "Сначала получи мэтч, затем нажми «💬 Начать диалог».",
+            reply_markup=feed_keyboard,
+        )
+        return
+
+    try:
+        await send_interaction(user_id, matched_user_id, "dialog_start")
+        await message.answer(
+            "Диалог отмечен как начатый. Удачного общения! 💬",
+            reply_markup=feed_keyboard,
+        )
+        await notify_user_by_user_id(
+            matched_user_id,
+            "Твой мэтч нажал «💬 Начать диалог». Можно продолжать общение!",
+            reply_markup=feed_keyboard,
+        )
+    except aiohttp.ClientError:
+        await message.answer("Не удалось отметить старт диалога.")
 
 
 @dp.message(lambda message: message.text == "⏭ Скип")

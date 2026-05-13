@@ -1,0 +1,9 @@
+.git
+.venv
+__pycache__
+*.pyc
+hw1
+hw2
+hw3
+hw4
+docs

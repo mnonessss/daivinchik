@@ -1,9 +1,14 @@
 aiohttp
 aiogram
+aiosqlite
 alembic
 asyncpg
+celery
 fastapi
+httpx
 python-dotenv
+pytest
+pytest-asyncio
 redis
 sqlalchemy
 uvicorn
